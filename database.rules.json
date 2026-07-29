@@ -1,0 +1,56 @@
+{
+  "rules": {
+    "admins": {
+      "$uid": {
+        ".read": "auth !== null && auth.uid === $uid",
+        ".write": false
+      }
+    },
+    "quizzes": {
+      ".read": "auth !== null && (root.child('admins/' + auth.uid).exists() || data.child('isPublished').val() === true)",
+      ".write": "auth !== null && root.child('admins/' + auth.uid).exists()",
+      ".indexOn": ["isPublished", "createdAt"]
+    },
+    "quizQuestions": {
+      "$quizId": {
+        ".read": "auth !== null && (root.child('admins/' + auth.uid).exists() || root.child('quizzes/' + $quizId + '/isPublished').val() === true)",
+        ".write": "auth !== null && root.child('admins/' + auth.uid).exists()"
+      }
+    },
+    "answerKeys": {
+      "$quizId": {
+        ".read": "auth !== null && root.child('admins/' + auth.uid).exists()",
+        ".write": "auth !== null && root.child('admins/' + auth.uid).exists()"
+      }
+    },
+    "attempts": {
+      "$quizId": {
+        "$rollNumber": {
+          ".read": "auth !== null && root.child('admins/' + auth.uid).exists()",
+          ".write": "auth !== null && (root.child('admins/' + auth.uid).exists() || (!data.exists() && newData.child('status').val() === 'started'))",
+          ".validate": "newData.hasChildren(['status', 'studentName', 'rollNo', 'rollNoKey', 'startedAt'])"
+        }
+      }
+    },
+    "submissions": {
+      "$quizId": {
+        ".read": "auth !== null && root.child('admins/' + auth.uid).exists()",
+        "$submissionId": {
+          ".write": "auth !== null && (root.child('admins/' + auth.uid).exists() || (!data.exists() && newData.child('quizId').val() === $quizId && newData.child('rollNoKey').val() !== ''))",
+          ".validate": "newData.hasChildren(['quizId', 'rollNoKey', 'studentName', 'rollNo', 'submittedAt'])"
+        }
+      }
+    },
+    "violations": {
+      "$quizId": {
+        "$submissionId": {
+          ".read": "auth !== null && root.child('admins/' + auth.uid).exists()",
+          "$violationId": {
+            ".write": "auth !== null && !data.exists()",
+            ".validate": "newData.hasChildren(['type', 'timestamp', 'questionIndex'])"
+          }
+        }
+      }
+    }
+  }
+}
