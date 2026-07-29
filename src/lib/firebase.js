@@ -26,13 +26,6 @@ if (missingKeys.length) {
   throw new Error(`Firebase configuration incomplete. Missing: ${missingKeys.join(", ")}`);
 }
 
-if (!firebaseConfig.databaseURL?.includes("firebaseio.com")) {
-  console.error(
-    "❌ Invalid DATABASE_URL. It should look like:\n" +
-    "https://your-project-default-rtdb.firebaseio.com"
-  );
-  throw new Error("Invalid Firebase Database URL");
-}
 
 console.log("✅ Firebase configuration loaded successfully");
 console.log(`📦 Project: ${firebaseConfig.projectId}`);

@@ -75,7 +75,7 @@ export default function StudentHome() {
                 <SafetyCertificateOutlined /> Secure Quiz Platform
               </span>
               <h1 className="text-4xl sm:text-5xl font-black text-gray-900 leading-tight mb-3">
-                Welcome to <span className="text-primary-600">QuizGuard</span>
+                Welcome to <span className="text-primary-600">QuizBoard</span>
               </h1>
               <p className="text-gray-500 text-base max-w-md mx-auto">
                 Read each question carefully and answer on your own. Your quiz is monitored.

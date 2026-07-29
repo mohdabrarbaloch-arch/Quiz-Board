@@ -278,7 +278,7 @@ export default function AdminDashboard() {
             <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-white font-black text-xl group-hover:bg-white/30 transition flex-shrink-0">Q</div>
             {!sidebarCollapsed && (
               <div>
-                <p className="text-white font-black text-base leading-none">QuizGuard</p>
+                <p className="text-white font-black text-base leading-none">QuizBoard</p>
                 <p className="text-white/80 text-xs mt-0.5">Admin Panel</p>
               </div>
             )}
@@ -320,9 +320,9 @@ export default function AdminDashboard() {
           <div className="px-6 py-4 border-t border-white/10">
             <p className="text-white/70 text-xs text-center">
               © {new Date().getFullYear()}{" "}
-              <a href="https://github.com/AbdulMoiz34" target="_blank" rel="noopener noreferrer"
+              <a href="https://www.linkedin.com/in/m-abrar-baloch" target="_blank" rel="noopener noreferrer"
                 className="text-white hover:text-white/90 transition-colors font-semibold">
-                Abdul Moiz
+                Abrar Baloch
               </a>
             </p>
           </div>
