@@ -14,7 +14,7 @@ export default function Logo({ size = "md", className = "" }) {
       </div>
       <div className="flex flex-col">
         <span className="font-black text-gray-900 text-xl tracking-tight">
-          QuizGuard
+          QuizBoard
         </span>
         <span className="text-xs text-gray-500 font-medium tracking-wide uppercase">
           Secure Testing

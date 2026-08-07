@@ -52,7 +52,7 @@ export default function AdminLogin() {
             <span className="text-white font-black text-4xl">Q</span>
           </div>
           <h1 className="text-4xl font-black text-white mb-3 leading-tight">
-            QuizGuard
+            QuizBoard
           </h1>
           <p className="text-white/70 text-base max-w-xs mx-auto leading-relaxed">
             Secure quiz management platform for educators
@@ -80,12 +80,12 @@ export default function AdminLogin() {
         <p className="absolute bottom-6 text-white/40 text-xs">
           © {new Date().getFullYear()} Developed by{" "}
           <a
-            href="https://github.com/AbdulMoiz34"
+            href="https://github.com/mohdabrarbaloch-arch"
             target="_blank"
             rel="noopener noreferrer"
             className="text-white/60 hover:text-white transition-colors font-semibold"
           >
-            Abdul Moiz
+            Abarar Baloch
           </a>
         </p>
       </div>
@@ -100,7 +100,7 @@ export default function AdminLogin() {
               <span className="text-white font-black text-xl">Q</span>
             </div>
             <div>
-              <p className="font-black text-gray-900 leading-none">QuizGuard</p>
+              <p className="font-black text-gray-900 leading-none">QuizBoard</p>
               <p className="text-xs text-gray-500">Admin Panel</p>
             </div>
           </div>
@@ -177,12 +177,12 @@ export default function AdminLogin() {
           <p className="lg:hidden text-center text-xs text-gray-400 mt-8">
             © {new Date().getFullYear()} Developed by{" "}
             <a
-              href="https://github.com/AbdulMoiz34"
+              href="https://github.com/mohdabrarbaloch-arch"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary-600 hover:text-primary-700 font-semibold"
             >
-              Abdul Moiz
+              Abrar Baloch
             </a>
           </p>
         </div>
