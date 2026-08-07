@@ -27,13 +27,6 @@ if (missingKeys.length) {
   throw new Error(errorMessage);
 }
 
-if (!firebaseConfig.databaseURL?.includes("firebaseio.com")) {
-  const errorMessage = "Invalid Firebase Database URL";
-  console.error(
-    `❌ ${errorMessage}. It should look like: https://your-project-default-rtdb.firebaseio.com`
-  );
-  throw new Error(errorMessage);
-}
 
 if (import.meta.env.DEV) {
   console.log("✅ Firebase configuration loaded successfully");
