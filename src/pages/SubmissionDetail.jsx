@@ -238,10 +238,17 @@ export default function SubmissionDetail() {
               return (
                 <div key={question.id} className={`rounded-2xl border px-5 py-4 ${borderCls}`}>
                   <div className="flex items-start justify-between gap-3 mb-2">
-                    <p className="text-sm font-semibold text-gray-900 leading-snug">
-                      <span className="text-gray-400 mr-1">Q{idx + 1}.</span>
-                      {question.prompt}
-                    </p>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-gray-900 leading-snug">
+                        <span className="text-gray-400 mr-1">Q{idx + 1}.</span>
+                        {question.prompt}
+                      </p>
+                      {question.code && (
+                        <pre className="mt-2 bg-gray-900 text-emerald-400 border border-gray-800 rounded-xl p-3 font-mono text-xs leading-relaxed overflow-x-auto whitespace-pre-wrap select-text">
+                          <code>{question.code}</code>
+                        </pre>
+                      )}
+                    </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0">
                       {timedOut && <Tag color="orange" className="!text-xs !m-0">Timed out</Tag>}
                       {isManual ? (

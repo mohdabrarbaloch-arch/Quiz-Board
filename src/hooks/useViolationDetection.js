@@ -1,25 +1,18 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-/**
- * Custom hook for detecting and recording quiz violations
- * Production-grade with comprehensive anti-cheating detection
- * @param {Function} onViolation - Callback when violation is detected
- * @param {boolean} isActive - Whether detection should be active
- * @returns {Object} Violation detection controls
- */
+const VIOLATION_DEBOUNCE_MS = 1000;
+
 export function useViolationDetection(onViolation, isActive = false) {
   const onViolationRef = useRef(onViolation);
   const lastViolationRef = useRef(0);
-  const violationDebounceMs = 1000; // Prevent duplicate violations
 
   useEffect(() => {
     onViolationRef.current = onViolation;
   }, [onViolation]);
 
   const recordViolation = useCallback((type, details = {}) => {
-    // Debounce to prevent duplicate violations
     const now = Date.now();
-    if (now - lastViolationRef.current < violationDebounceMs) {
+    if (now - lastViolationRef.current < VIOLATION_DEBOUNCE_MS) {
       return;
     }
     lastViolationRef.current = now;
@@ -34,26 +27,32 @@ export function useViolationDetection(onViolation, isActive = false) {
       return undefined;
     }
 
-    // Tab/Window visibility change
-    const handleVisibilityChange = () => {
+    let focusLostPending = false;
+
+    const handleFocusLost = () => {
       if (document.hidden) {
-        recordViolation("tab_switch", {
-          message: "You switched tabs or minimized the window.",
-        });
+        if (!focusLostPending) {
+          focusLostPending = true;
+          recordViolation("tab_switch", {
+            message: "You switched tabs or minimized the window.",
+          });
+          setTimeout(() => {
+            focusLostPending = false;
+          }, VIOLATION_DEBOUNCE_MS + 200);
+        }
+      } else {
+        if (!focusLostPending) {
+          focusLostPending = true;
+          recordViolation("window_blur", {
+            message: "The quiz window lost focus.",
+          });
+          setTimeout(() => {
+            focusLostPending = false;
+          }, VIOLATION_DEBOUNCE_MS + 200);
+        }
       }
     };
 
-    // Window blur (lost focus)
-    const handleBlur = () => {
-      // Only trigger if document is visible (not switching tabs)
-      if (!document.hidden) {
-        recordViolation("window_blur", {
-          message: "The quiz window lost focus.",
-        });
-      }
-    };
-
-    // Right-click prevention
     const handleContextMenu = (e) => {
       e.preventDefault();
       recordViolation("right_click", {
@@ -61,11 +60,9 @@ export function useViolationDetection(onViolation, isActive = false) {
       });
     };
 
-    // Keyboard shortcuts and key presses
     const handleKeyDown = (e) => {
       const key = e.key.toLowerCase();
       
-      // Block ESC key explicitly
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
@@ -75,7 +72,6 @@ export function useViolationDetection(onViolation, isActive = false) {
         return;
       }
 
-      // Block F11 (fullscreen toggle)
       if (e.key === "F11") {
         e.preventDefault();
         e.stopPropagation();
@@ -85,7 +81,6 @@ export function useViolationDetection(onViolation, isActive = false) {
         return;
       }
       
-      // Block F12 and developer shortcuts
       if (
         e.key === "F12" ||
         (e.ctrlKey && e.shiftKey && ["i", "j", "c", "k"].includes(key)) ||
@@ -99,7 +94,6 @@ export function useViolationDetection(onViolation, isActive = false) {
         return;
       }
 
-      // Block copy, cut, paste
       if (e.ctrlKey && ["c", "x", "v"].includes(key)) {
         e.preventDefault();
         e.stopPropagation();
@@ -109,7 +103,6 @@ export function useViolationDetection(onViolation, isActive = false) {
         return;
       }
 
-      // Block Ctrl+U (view source)
       if (e.ctrlKey && key === "u") {
         e.preventDefault();
         e.stopPropagation();
@@ -119,14 +112,12 @@ export function useViolationDetection(onViolation, isActive = false) {
         return;
       }
 
-      // Block Ctrl+S (save page)
       if (e.ctrlKey && key === "s") {
         e.preventDefault();
         e.stopPropagation();
         return;
       }
 
-      // Block F5 and Ctrl+R (page refresh)
       if (e.key === "F5" || (e.ctrlKey && key === "r")) {
         e.preventDefault();
         e.stopPropagation();
@@ -136,21 +127,27 @@ export function useViolationDetection(onViolation, isActive = false) {
         return;
       }
 
-      // Block Ctrl+W (close tab)
+      if (e.ctrlKey && key === "t") {
+        e.preventDefault();
+        e.stopPropagation();
+        recordViolation("new_tab_attempt", {
+          message: "Opening new tabs is not allowed during the quiz.",
+        });
+        return;
+      }
+
       if (e.ctrlKey && key === "w") {
         e.preventDefault();
         e.stopPropagation();
         return;
       }
 
-      // Block Alt+F4 (close window)
       if (e.altKey && e.key === "F4") {
         e.preventDefault();
         e.stopPropagation();
         return;
       }
 
-      // Block Print Screen
       if (e.key === "PrintScreen") {
         e.preventDefault();
         recordViolation("screenshot_attempt", {
@@ -160,7 +157,6 @@ export function useViolationDetection(onViolation, isActive = false) {
       }
     };
 
-    // Prevent keyup for blocked keys
     const handleKeyUp = (e) => {
       const key = e.key.toLowerCase();
       const blockedKeys = ["Escape", "F11", "F12", "F5", "PrintScreen"];
@@ -174,11 +170,10 @@ export function useViolationDetection(onViolation, isActive = false) {
       }
     };
 
-    // Clipboard events
     const handleCopy = (e) => {
       const target = e.target;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") {
-        return; // Allow in input fields
+        return;
       }
       e.preventDefault();
       recordViolation("copy_attempt", {
@@ -196,7 +191,7 @@ export function useViolationDetection(onViolation, isActive = false) {
     const handlePaste = (e) => {
       const target = e.target;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") {
-        return; // Allow in input fields
+        return;
       }
       e.preventDefault();
       recordViolation("paste_attempt", {
@@ -204,7 +199,6 @@ export function useViolationDetection(onViolation, isActive = false) {
       });
     };
 
-    // Text selection (prevent except in input fields)
     const handleSelectStart = (e) => {
       const target = e.target;
       if (
@@ -217,7 +211,6 @@ export function useViolationDetection(onViolation, isActive = false) {
       e.preventDefault();
     };
 
-    // Prevent beforeunload
     const handleBeforeUnload = (e) => {
       e.preventDefault();
       e.returnValue = "Quiz in progress. Are you sure you want to leave?";
@@ -227,22 +220,20 @@ export function useViolationDetection(onViolation, isActive = false) {
       return e.returnValue;
     };
 
-    // Attach all listeners with capture phase for ESC key
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("blur", handleBlur);
+    document.addEventListener("visibilitychange", handleFocusLost);
+    window.addEventListener("blur", handleFocusLost);
     document.addEventListener("contextmenu", handleContextMenu);
-    document.addEventListener("keydown", handleKeyDown, true); // Capture phase
-    document.addEventListener("keyup", handleKeyUp, true); // Capture phase
+    document.addEventListener("keydown", handleKeyDown, true);
+    document.addEventListener("keyup", handleKeyUp, true);
     document.addEventListener("copy", handleCopy);
     document.addEventListener("cut", handleCut);
     document.addEventListener("paste", handlePaste);
     document.addEventListener("selectstart", handleSelectStart);
     window.addEventListener("beforeunload", handleBeforeUnload);
 
-    // Cleanup
     return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("blur", handleBlur);
+      document.removeEventListener("visibilitychange", handleFocusLost);
+      window.removeEventListener("blur", handleFocusLost);
       document.removeEventListener("contextmenu", handleContextMenu);
       document.removeEventListener("keydown", handleKeyDown, true);
       document.removeEventListener("keyup", handleKeyUp, true);

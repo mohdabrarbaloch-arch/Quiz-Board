@@ -1,34 +1,32 @@
 import {
   BarChartOutlined, DeleteOutlined, DownloadOutlined,
   EditOutlined, ExportOutlined, FileAddOutlined, LogoutOutlined,
-  MenuFoldOutlined, MenuUnfoldOutlined,
-  PlusOutlined, ReloadOutlined, EyeOutlined,
+  MenuFoldOutlined, MenuUnfoldOutlined, MessageOutlined,
+  PlusOutlined, ReloadOutlined, EyeOutlined, StarFilled, TrophyOutlined
 } from "@ant-design/icons";
-import {
-  Button, Checkbox, Form, Input, InputNumber,
-  Popconfirm, Select, Table, Tag, message,
-} from "antd";
+import { Button, Checkbox, Form, Input, InputNumber, Popconfirm, Select, Table, Tag, message } from "antd";
 import { signOut } from "firebase/auth";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import StatCard from "../components/ui/StatCard";
+import ClassProgress from "../components/admin/ClassProgress";
 import { sampleQuiz } from "../data/sampleQuiz";
 import { auth } from "../lib/firebase";
 import { calculateObjectiveScore, escapeCsv, formatDate } from "../lib/quiz";
-import {
-  createQuiz, deleteQuiz, fetchAnswerKeys,
-  fetchQuizQuestions, fetchQuizzes, toggleQuizPublished,
-} from "../services/quizService";
+import { createQuiz, deleteQuiz, fetchAnswerKeys, fetchQuizQuestions, fetchQuizzes, toggleQuizPublished, updateQuizQuestions } from "../services/quizService";
 import { deleteAttempt, fetchSubmissions } from "../services/submissionService";
+import { fetchAllFeedback } from "../services/feedbackService";
 
 function blankQuestion() {
-  return { type: "mcq", prompt: "", options: ["", "", "", ""], correctAnswer: "", points: 1, timeSeconds: 45 };
+  return { type: "mcq", prompt: "", code: "", options: ["", "", "", ""], correctAnswer: "", points: 1, timeSeconds: 45 };
 }
 
 const NAV = [
   { key: "quizzes", label: "Quizzes", icon: <BarChartOutlined /> },
   { key: "create", label: "Create Quiz", icon: <FileAddOutlined /> },
+  { key: "progress", label: "Progress", icon: <TrophyOutlined /> },
   { key: "submissions", label: "Submissions", icon: <ExportOutlined /> },
+  { key: "feedbacks", label: "Feedbacks", icon: <MessageOutlined /> },
 ];
 
 export default function AdminDashboard() {
@@ -46,6 +44,16 @@ export default function AdminDashboard() {
   const [answerKeys, setAnswerKeys] = useState([]);
   const [loadingSubmissions, setLoadingSubmissions] = useState(false);
   const [search, setSearch] = useState("");
+  const [editingQuizId, setEditingQuizId] = useState(null);
+  const [feedbacks, setFeedbacks] = useState([]);
+  const [loadingFeedbacks, setLoadingFeedbacks] = useState(false);
+
+  function cancelEdit() {
+    setEditingQuizId(null);
+    form.resetFields();
+    setQuestions([blankQuestion()]);
+    setTab("quizzes");
+  }
 
   /* ── Load quizzes ─────────────────────────────────────────── */
   const loadQuizzes = useCallback(async () => {
@@ -61,7 +69,6 @@ export default function AdminDashboard() {
   useEffect(() => { loadQuizzes(); }, [loadQuizzes]);
   const selectedQuiz = useMemo(() => quizzes.find((q) => q.id === selectedQuizId), [quizzes, selectedQuizId]);
 
-  /* ── Load submissions ─────────────────────────────────────── */
   async function loadSubmissions(qid) {
     if (!qid) return;
     setSelectedQuizId(qid);
@@ -78,10 +85,19 @@ export default function AdminDashboard() {
   }
 
   useEffect(() => {
-    if (tab === "submissions" && selectedQuizId) loadSubmissions(selectedQuizId);
+    if ((tab === "submissions" || tab === "progress") && selectedQuizId) loadSubmissions(selectedQuizId);
   }, [tab, selectedQuizId]);
 
-  /* ── Quiz CRUD ────────────────────────────────────────────── */
+  useEffect(() => {
+    if (tab === "feedbacks") {
+      setLoadingFeedbacks(true);
+      fetchAllFeedback()
+        .then(setFeedbacks)
+        .catch(() => message.error("Could not load feedbacks."))
+        .finally(() => setLoadingFeedbacks(false));
+    }
+  }, [tab]);
+
   async function handleTogglePublished(quiz) {
     try {
       await toggleQuizPublished(quiz.id, !quiz.isPublished);
@@ -98,15 +114,42 @@ export default function AdminDashboard() {
     } catch { message.error("Could not delete quiz."); }
   }
 
-  function handleDuplicateQuiz(quiz) {
-    form.setFieldsValue({
-      title: `${quiz.title} (Copy)`, description: quiz.description || "",
-      durationMinutes: quiz.durationMinutes, questionTimeSeconds: quiz.questionTimeSeconds || 45,
-      maxViolations: quiz.maxViolations || 3, randomizeQuestions: false,
-      randomizeOptions: false, isPublished: false,
-    });
-    setTab("create");
-    message.info("Quiz loaded. Review and save.");
+  async function handleEditQuiz(quiz) {
+    try {
+      const [questionsData, answerKeysData] = await Promise.all([
+        fetchQuizQuestions(quiz.id),
+        fetchAnswerKeys(quiz.id),
+      ]);
+      const keyMap = new Map(answerKeysData.map((k) => [k.id, k.correctAnswer]));
+      // Embed Firebase key (_key) in each question so student answers still match after save
+      const formattedQuestions = questionsData.map((q) => ({
+        _key: q.id,
+        type: q.type || "mcq",
+        prompt: q.prompt || "",
+        code: q.code || "",
+        options: q.options || [],
+        correctAnswer: keyMap.get(q.id) || "",
+        points: q.points || 1,
+        timeSeconds: q.timeSeconds || 45,
+      }));
+      form.setFieldsValue({
+        title: quiz.title,
+        description: quiz.description || "",
+        durationMinutes: quiz.durationMinutes,
+        questionTimeSeconds: quiz.questionTimeSeconds || 45,
+        maxViolations: quiz.maxViolations || 3,
+        randomizeQuestions: quiz.randomizeQuestions || false,
+        randomizeOptions: quiz.randomizeOptions || false,
+        isPublished: quiz.isPublished || false,
+      });
+      setQuestions(formattedQuestions.length > 0 ? formattedQuestions : [blankQuestion()]);
+      setEditingQuizId(quiz.id);
+      setSelectedQuizId(quiz.id);
+      setTab("create");
+      message.success("Quiz loaded for editing.");
+    } catch {
+      message.error("Could not load quiz questions.");
+    }
   }
 
   async function handleResetAttempt(sub) {
@@ -117,7 +160,6 @@ export default function AdminDashboard() {
     } catch { message.error("Could not reset attempt."); }
   }
 
-  /* ── Question helpers ─────────────────────────────────────── */
   function updateQuestion(idx, field, value) {
     setQuestions((all) => all.map((q, i) => {
       if (i !== idx) return q;
@@ -156,22 +198,30 @@ export default function AdminDashboard() {
     if (err) { message.error(err); return; }
     setSaving(true);
     try {
-      await createQuiz({
+      const quizPayload = {
         title: values.title, description: values.description || "",
         durationMinutes: values.durationMinutes, questionTimeSeconds: values.questionTimeSeconds || 45,
         maxViolations: values.maxViolations || 3, randomizeQuestions: values.randomizeQuestions || false,
         randomizeOptions: values.randomizeOptions || false, isPublished: values.isPublished || false,
-      }, questions);
-      message.success(`Quiz saved with ${questions.length} questions.`);
+      };
+
+      if (editingQuizId) {
+        await updateQuizQuestions(editingQuizId, quizPayload, questions);
+        message.success(`Quiz updated with ${questions.length} questions.`);
+      } else {
+        await createQuiz(quizPayload, questions);
+        message.success(`Quiz saved with ${questions.length} questions.`);
+      }
+
       form.resetFields();
       setQuestions([blankQuestion()]);
+      setEditingQuizId(null);
       await loadQuizzes();
       setTab("quizzes");
     } catch { message.error("Could not save quiz."); }
     finally { setSaving(false); }
   }
 
-  /* ── CSV export ───────────────────────────────────────────── */
   function handleExportCsv() {
     if (!submissions.length) return;
     const rows = [
@@ -197,14 +247,15 @@ export default function AdminDashboard() {
 
   const filteredSubmissions = useMemo(() => {
     if (!search) return submissions;
-    const q = search.toLowerCase();
-    return submissions.filter((s) =>
-      (s.studentName || "").toLowerCase().includes(q) ||
-      (s.rollNo || "").toLowerCase().includes(q)
+
+    const q = String(search).toLowerCase();
+
+    return submissions?.filter((s) =>
+      String(s?.studentName ?? "").toLowerCase().includes(q) ||
+      String(s?.rollNo ?? "").toLowerCase().includes(q)
     );
   }, [submissions, search]);
 
-  /* ── Submission table columns ─────────────────────────────── */
   const submissionColumns = [
     {
       title: "Student", key: "student",
@@ -267,10 +318,8 @@ export default function AdminDashboard() {
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      {/* ── Sidebar ─────────────────────────────────────────── */}
       <aside className={`${sidebarCollapsed ? 'w-20' : 'w-64'} flex-shrink-0 flex flex-col bg-gradient-to-b from-primary-600 to-primary-700 sticky top-0 h-screen shadow-2xl transition-all duration-300 relative`}>
 
-        {/* No floating toggle here — it lives in the header */}
 
         {/* Logo */}
         <div className={`${sidebarCollapsed ? 'px-4' : 'px-6'} py-6 border-b border-white/10`}>
@@ -278,7 +327,7 @@ export default function AdminDashboard() {
             <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-white font-black text-xl group-hover:bg-white/30 transition flex-shrink-0">Q</div>
             {!sidebarCollapsed && (
               <div>
-                <p className="text-white font-black text-base leading-none">QuizBoard</p>
+                <p className="text-white font-black text-base leading-none">QuizGuard</p>
                 <p className="text-white/80 text-xs mt-0.5">Admin Panel</p>
               </div>
             )}
@@ -289,7 +338,12 @@ export default function AdminDashboard() {
         <nav className="flex-1 px-3 py-6 space-y-1">
           {NAV.map((item) => (
             <button
-              key={item.key} onClick={() => setTab(item.key)} type="button"
+              key={item.key} onClick={() => {
+                if (item.key !== "create") {
+                  setEditingQuizId(null);
+                }
+                setTab(item.key);
+              }} type="button"
               title={sidebarCollapsed ? item.label : undefined}
               className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'gap-3 px-4'} py-3 rounded-xl text-sm font-semibold transition-all duration-150 text-left
                 ${tab === item.key
@@ -320,16 +374,15 @@ export default function AdminDashboard() {
           <div className="px-6 py-4 border-t border-white/10">
             <p className="text-white/70 text-xs text-center">
               © {new Date().getFullYear()}{" "}
-              <a href="https://www.linkedin.com/in/m-abrar-baloch" target="_blank" rel="noopener noreferrer"
+              <a href="https://github.com/AbdulMoiz34" target="_blank" rel="noopener noreferrer"
                 className="text-white hover:text-white/90 transition-colors font-semibold">
-                Abrar Baloch
+                Abdul Moiz
               </a>
             </p>
           </div>
         )}
       </aside>
 
-      {/* ── Main ────────────────────────────────────────────── */}
       <main className="flex-1 overflow-auto">
         {/* Top bar */}
         <header className="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between sticky top-0 z-30 shadow-sm">
@@ -345,17 +398,15 @@ export default function AdminDashboard() {
                 : <MenuFoldOutlined style={{ fontSize: 18 }} />}
             </button>
             <div>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">AI &amp; Game Creators</p>
-              <h1 className="text-xl font-black text-gray-900">
-                {tab === "quizzes" ? "Quiz Overview" : tab === "create" ? "Create Quiz" : "Student Submissions"}
-              </h1>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">AI &amp; Game Creators</p>                <h1 className="text-xl font-black text-gray-900">
+                  {tab === "quizzes" ? "Quiz Overview" : tab === "create" && editingQuizId ? `Editing: ${selectedQuiz?.title || "Quiz"}` : tab === "create" ? "Create Quiz" : tab === "progress" ? "Class Progress" : tab === "feedbacks" ? "Student Feedbacks" : "Student Submissions"}
+                </h1>
             </div>
           </div>
         </header>
 
         <div className="p-8">
 
-          {/* ── QUIZZES TAB ─────────────────────────────────── */}
           {tab === "quizzes" && (
             <>
               <div className="grid grid-cols-3 gap-5 mb-8">
@@ -414,7 +465,7 @@ export default function AdminDashboard() {
                           <button onClick={() => { setSelectedQuizId(quiz.id); setTab("submissions"); }} className="px-3 py-2 text-sm font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl transition-all">
                             <EyeOutlined /> Submissions
                           </button>
-                          <button onClick={() => handleDuplicateQuiz(quiz)} className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all">
+                          <button onClick={() => handleEditQuiz(quiz)} className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition-all" title="Edit quiz">
                             <EditOutlined />
                           </button>
                           <Popconfirm title="Delete this quiz?" description="This cannot be undone." onConfirm={() => handleDeleteQuiz(quiz.id)}>
@@ -429,7 +480,6 @@ export default function AdminDashboard() {
             </>
           )}
 
-          {/* ── CREATE TAB ──────────────────────────────────── */}
           {tab === "create" && (
             <Form form={form} layout="vertical" onFinish={saveQuiz}
               initialValues={{ durationMinutes: 45, questionTimeSeconds: 45, maxViolations: 3, randomizeQuestions: false, randomizeOptions: false, isPublished: false }}
@@ -519,7 +569,9 @@ export default function AdminDashboard() {
 
                       <div className="px-5 py-5">
                         <Input.TextArea rows={2} value={q.prompt} onChange={(e) => updateQuestion(qi, "prompt", e.target.value)}
-                          placeholder="Write your question here…" className="rounded-xl mb-4" />
+                          placeholder="Write your question here…" className="rounded-xl mb-3" />
+                        <Input.TextArea rows={3} value={q.code || ""} onChange={(e) => updateQuestion(qi, "code", e.target.value)}
+                          placeholder="Code snippet (optional) — e.g. console.log(5 === '5');" className="rounded-xl mb-4 font-mono text-sm bg-gray-50" />
 
                         {q.type === "mcq" && (
                           <div className="grid grid-cols-2 gap-3">
@@ -557,18 +609,34 @@ export default function AdminDashboard() {
 
               {/* Save Button */}
               <div className="flex gap-4">
-                <button type="button" onClick={() => setTab("quizzes")} className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-all">
+                <button type="button" onClick={cancelEdit} className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-all">
                   Cancel
                 </button>
                 <button type="submit" disabled={saving}
                   className="flex-1 py-3 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-60 flex items-center justify-center gap-2">
-                  {saving ? <><span className="loader !w-5 !h-5 !border-white/30 !border-t-white" /> Saving…</> : `Save Quiz (${questions.length} questions)`}
+                  {saving ? (
+                    <><span className="loader !w-5 !h-5 !border-white/30 !border-t-white" /> Saving…</>
+                  ) : editingQuizId ? (
+                    `Update Quiz (${questions.length} questions)`
+                  ) : (
+                    `Save Quiz (${questions.length} questions)`
+                  )}
                 </button>
               </div>
             </Form>
           )}
 
-          {/* ── SUBMISSIONS TAB ─────────────────────────────── */}
+          {tab === "progress" && (
+            <ClassProgress
+              submissions={submissions}
+              questions={submissionQuestions}
+              answerKeys={answerKeys}
+              quizzes={quizzes}
+              selectedQuizId={selectedQuizId}
+              onSelectQuiz={(qid) => { setSelectedQuizId(qid); }}
+            />
+          )}
+
           {tab === "submissions" && (
             <>
               {/* Toolbar */}
@@ -622,6 +690,85 @@ export default function AdminDashboard() {
                     />
                   </div>
                 </>
+              )}
+            </>
+          )}
+
+          {tab === "feedbacks" && (
+            <>
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-lg font-black text-gray-900">All Student Feedbacks</h2>
+                  <p className="text-sm text-gray-500 mt-1">{feedbacks.length} response{feedbacks.length !== 1 ? "s" : ""} received</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setLoadingFeedbacks(true);
+                    fetchAllFeedback()
+                      .then(setFeedbacks)
+                      .catch(() => message.error("Could not load feedbacks."))
+                      .finally(() => setLoadingFeedbacks(false));
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-sm rounded-xl transition-all cursor-pointer"
+                >
+                  <ReloadOutlined /> Refresh
+                </button>
+              </div>
+
+              {loadingFeedbacks ? (
+                <div className="flex items-center justify-center gap-3 py-20 text-gray-400">
+                  <span className="loader" /> <span className="text-sm">Loading feedbacks…</span>
+                </div>
+              ) : feedbacks.length === 0 ? (
+                <div className="border-2 border-dashed border-gray-200 rounded-2xl py-16 text-center">
+                  <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-3 text-2xl text-gray-400">
+                    <MessageOutlined />
+                  </div>
+                  <p className="font-bold text-gray-800">No feedbacks yet</p>
+                  <p className="text-sm text-gray-500 mt-1">Feedbacks submitted by students will appear here.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                  {feedbacks.map((fb) => {
+                    const categoryMeta = {
+                      education: { label: "Education", color: "bg-primary-100 text-primary-700 border-primary-200" },
+                      teacher: { label: "Teacher", color: "bg-green-100 text-green-700 border-green-200" },
+                      general: { label: "Overall Experience", color: "bg-amber-100 text-amber-700 border-amber-200" },
+                    };
+                    const meta = categoryMeta[fb.category] || { label: fb.category, color: "bg-gray-100 text-gray-600 border-gray-200" };
+                    const date = fb.clientSubmittedAt
+                      ? new Date(fb.clientSubmittedAt).toLocaleString("en-PK", { dateStyle: "medium", timeStyle: "short" })
+                      : "—";
+                    return (
+                      <div key={fb.id} className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-md hover:border-primary-200 transition-all duration-200">
+                        <div className="flex items-start justify-between gap-2 mb-3">
+                          <div>
+                            <p className="font-black text-gray-900 text-sm">{fb.name || <em className="text-gray-400 font-normal">Anonymous</em>}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">{date}</p>
+                          </div>
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${meta.color} flex-shrink-0`}>
+                            {meta.label}
+                          </span>
+                        </div>
+
+                        {fb.rating > 0 && (
+                          <div className="flex items-center gap-0.5 mb-3">
+                            {[1,2,3,4,5].map((s) => (
+                              <StarFilled key={s} style={{ fontSize: 14, color: s <= fb.rating ? "#f59e0b" : "#e5e7eb" }} />
+                            ))}
+                            <span className="text-xs text-gray-400 ml-1.5">{fb.rating}/5</span>
+                          </div>
+                        )}
+
+                        {fb.message ? (
+                          <p className="text-sm text-gray-600 leading-relaxed line-clamp-4">{fb.message}</p>
+                        ) : (
+                          <p className="text-sm text-gray-300 italic">No message provided</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </>
           )}

@@ -42,6 +42,8 @@ export default function QuizAttempt() {
   const [isAnswered, setIsAnswered] = useState(false);
   const [showSaved, setShowSaved] = useState(false);
   const [scoreResult, setScoreResult] = useState(null); // { score, maximum, correct, wrong, pct, passed }
+  const [frozen, setFrozen] = useState(false);
+  const [visTick, setVisTick] = useState(0);
 
   const quizRef = useRef(null);
   const questionsRef = useRef([]);
@@ -56,6 +58,13 @@ export default function QuizAttempt() {
     if (studentName && rollNo)
       sessionStorage.setItem(identityKey, JSON.stringify({ studentName, rollNo }));
   }, [identityKey, rollNo, studentName]);
+
+  /* ── Visibility tick (triggers re-render when tab shown/hidden) ── */
+  useEffect(() => {
+    const handleVis = () => setVisTick((t) => t + 1);
+    document.addEventListener("visibilitychange", handleVis);
+    return () => document.removeEventListener("visibilitychange", handleVis);
+  }, []);
 
   /* ── Submit ─────────────────────────────────────────────── */
   const doSubmit = useCallback(async (reason = "completed", status = "completed") => {
@@ -108,15 +117,25 @@ export default function QuizAttempt() {
     const timeSpent = Math.floor((Date.now() - qStartTimeRef.current) / 1000);
     answersRef.current[currentIndex] = { questionId: questionsRef.current[currentIndex]?.id, answer: "", timeSpent, timedOut: true };
     setAnswers([...answersRef.current]);
-    if (currentIndex < questionsRef.current.length - 1) {
+    setIsAnswered(true);
+    const total = questionsRef.current.length;
+    let nextIdx = -1;
+    for (let i = 1; i < total; i++) {
+      const candidate = (currentIndex + i) % total;
+      const a = answersRef.current[candidate];
+      if (!a?.answer?.trim() && !a?.timedOut) { nextIdx = candidate; break; }
+    }
+    if (nextIdx >= 0) {
       setTimeout(() => {
-        setCurrentIndex((i) => i + 1);
+        setCurrentIndex(nextIdx);
         setIsAnswered(false);
         qStartTimeRef.current = Date.now();
         questionTimer.reset();
         questionTimer.start();
       }, 200);
-    } else { doSubmit("time_ended"); }
+    } else {
+      doSubmit("time_ended");
+    }
   }, [phase, currentIndex, doSubmit]);
 
   const questionTimer = useQuestionTimer(
@@ -128,6 +147,12 @@ export default function QuizAttempt() {
   /* ── Violation handler ──────────────────────────────────── */
   const handleViolation = useCallback(async (type, msg) => {
     if (phase !== "active" || isSubmittingRef.current) return;
+
+    // Freeze screen when focus is lost (tab switch, window blur, new tab)
+    if ((type === "tab_switch" || type === "window_blur" || type === "new_tab_attempt") && document.hidden) {
+      setFrozen(true);
+    }
+
     const v = {
       type, message: msg,
       questionIndex: currentIndex,
@@ -232,16 +257,43 @@ export default function QuizAttempt() {
       violations: violationsRef.current, questions: questionsRef.current,
       submissionId: submissionIdRef.current, startTime: startTimeRef.current,
     }));
-    setTimeout(() => {
-      setShowSaved(false);
-      if (currentIndex < questionsRef.current.length - 1) {
-        setCurrentIndex((i) => i + 1);
-        setIsAnswered(false);
-        qStartTimeRef.current = Date.now();
-        questionTimer.reset();
-        questionTimer.start();
-      } else { doSubmit("student"); }
-    }, 1200);
+    setTimeout(() => setShowSaved(false), 1200);
+  }
+
+  function goToQuestion(idx) {
+    if (idx < 0 || idx >= questionsRef.current.length || idx === currentIndex) return;
+    const hasAnswer = !!answersRef.current[idx]?.answer?.trim();
+    setCurrentIndex(idx);
+    setIsAnswered(hasAnswer);
+    if (!hasAnswer) {
+      qStartTimeRef.current = Date.now();
+      questionTimer.reset();
+      questionTimer.start();
+    } else {
+      questionTimer.stop();
+    }
+    sessionStorage.setItem(sessionKey, JSON.stringify({
+      status: "active", currentIndex: idx, answers: answersRef.current,
+      violations: violationsRef.current, questions: questionsRef.current,
+      submissionId: submissionIdRef.current, startTime: startTimeRef.current,
+    }));
+  }
+
+  function changeAnswer() {
+    setIsAnswered(false);
+    qStartTimeRef.current = Date.now();
+    questionTimer.reset();
+    questionTimer.start();
+  }
+
+  function confirmSubmit() {
+    Modal.confirm({
+      title: "Submit Quiz?",
+      content: `You have answered ${answeredCount} out of ${questions.length} questions. Submit now?`,
+      okText: "Submit Quiz",
+      cancelText: "Keep Reviewing",
+      onOk: () => doSubmit("student"),
+    });
   }
 
   const currentQ = questions[currentIndex];
@@ -611,92 +663,197 @@ export default function QuizAttempt() {
         <div className="bg-primary-500 h-1 transition-all duration-500" style={{ width: `${(answeredCount / questions.length) * 100}%` }} />
       </div>
 
-      {/* Question area */}
-      <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-8">
-        {currentQ && (
-          <div className="w-full max-w-2xl">
-            {/* Question header */}
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-gray-400 text-sm font-semibold">
-                Question {currentIndex + 1} of {questions.length}
-              </span>
-              {/* Per-question circular timer */}
-              <div className="relative w-14 h-14">
-                <svg className="w-14 h-14 -rotate-90" viewBox="0 0 56 56">
-                  <circle cx="28" cy="28" r="24" fill="none" stroke="#374151" strokeWidth="4" />
-                  <circle cx="28" cy="28" r="24" fill="none"
-                    stroke={qTimerDanger ? "#ef4444" : "#2563eb"}
-                    strokeWidth="4"
-                    strokeDasharray={`${2 * Math.PI * 24}`}
-                    strokeDashoffset={`${2 * Math.PI * 24 * (1 - qTimerPct / 100)}`}
-                    strokeLinecap="round"
-                    className="transition-all duration-1000"
-                  />
-                </svg>
-                <span className={`absolute inset-0 flex items-center justify-center text-sm font-black tabular-nums ${qTimerDanger ? "text-red-400" : "text-white"}`}>
-                  {questionTimer.secondsLeft}
+      {/* Main Content Layout Grid */}
+      <div className="relative z-10 flex-1 w-full max-w-7xl mx-auto px-6 py-8 flex flex-col lg:flex-row gap-8 items-start overflow-y-auto">
+        
+        {/* Left Column: Question Area */}
+        <div className="flex-1 w-full flex flex-col justify-start">
+          {currentQ && (
+            <div className="w-full">
+              {/* Question header */}
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-gray-400 text-sm font-semibold">
+                  Question {currentIndex + 1} of {questions.length}
                 </span>
-              </div>
-            </div>
-
-            {/* Question card */}
-            <div className="bg-gray-800 rounded-3xl border border-gray-700 p-8 shadow-2xl mb-5">
-              <h2 className="text-white font-black text-2xl leading-tight mb-8">
-                {currentQ.prompt}
-              </h2>
-
-              <div className="grid gap-3">
-                {(currentQ.options || []).map((opt, i) => {
-                  const selected = answers[currentIndex]?.answer === opt;
-                  return (
-                    <button key={i} onClick={() => !isAnswered && selectAnswer(opt)} disabled={isAnswered} type="button"
-                      className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl border-2 text-left transition-all duration-200
-                        ${selected
-                          ? "border-primary-500 bg-primary-500/20 text-white shadow-lg shadow-primary-500/10"
-                          : isAnswered
-                          ? "border-gray-700 bg-gray-700/30 text-gray-500 cursor-not-allowed"
-                          : "border-gray-700 bg-gray-700/50 text-gray-200 hover:border-primary-500/50 hover:bg-primary-500/10 cursor-pointer"
-                        }`}
-                    >
-                      <span className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm flex-shrink-0
-                        ${selected ? "bg-primary-500 text-white" : "bg-gray-600 text-gray-300"}`}>
-                        {String.fromCharCode(65 + i)}
+                {/* Per-question circular timer */}
+                <div className="relative w-14 h-14">
+                  {isAnswered ? (
+                    <div className="w-14 h-14 rounded-full bg-green-500/20 border-[4px] border-green-500 flex items-center justify-center">
+                      <span className="text-green-400 text-xl font-black">✓</span>
+                    </div>
+                  ) : (
+                    <>
+                      <svg className="w-14 h-14 -rotate-90" viewBox="0 0 56 56">
+                        <circle cx="28" cy="28" r="24" fill="none" stroke="#374151" strokeWidth="4" />
+                        <circle cx="28" cy="28" r="24" fill="none"
+                          stroke={qTimerDanger ? "#ef4444" : "#2563eb"}
+                          strokeWidth="4"
+                          strokeDasharray={`${2 * Math.PI * 24}`}
+                          strokeDashoffset={`${2 * Math.PI * 24 * (1 - qTimerPct / 100)}`}
+                          strokeLinecap="round"
+                          className="transition-all duration-1000"
+                        />
+                      </svg>
+                      <span className={`absolute inset-0 flex items-center justify-center text-sm font-black tabular-nums ${qTimerDanger ? "text-red-400" : "text-white"}`}>
+                        {questionTimer.secondsLeft}
                       </span>
-                      <span className="font-semibold text-base">{opt}</span>
-                      {selected && <span className="ml-auto text-primary-400 text-xl">✓</span>}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Question card */}
+              <div className="bg-gray-800 rounded-3xl border border-gray-700 p-8 shadow-2xl mb-5">
+                <h2 className="text-white font-black text-2xl leading-tight mb-4">
+                  {currentQ.prompt}
+                </h2>
+                {currentQ.code && (
+                  <pre className="bg-gray-900/90 text-emerald-400 border border-gray-700/80 rounded-2xl p-4 font-mono text-sm leading-relaxed overflow-x-auto whitespace-pre-wrap mb-6 select-text">
+                    <code>{currentQ.code}</code>
+                  </pre>
+                )}
+
+                <div className="grid gap-3">
+                  {(currentQ.options || []).map((opt, i) => {
+                    const selected = answers[currentIndex]?.answer === opt;
+                    return (
+                      <button key={i} onClick={() => !isAnswered && selectAnswer(opt)} disabled={isAnswered} type="button"
+                        className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl border-2 text-left transition-all duration-200
+                          ${selected
+                            ? "border-primary-500 bg-primary-500/20 text-white shadow-lg shadow-primary-500/10"
+                            : isAnswered
+                            ? "border-gray-700 bg-gray-700/30 text-gray-500 cursor-not-allowed"
+                            : "border-gray-700 bg-gray-700/50 text-gray-200 hover:border-primary-500/50 hover:bg-primary-500/10 cursor-pointer"
+                          }`}
+                      >
+                        <span className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm flex-shrink-0
+                          ${selected ? "bg-primary-500 text-white" : "bg-gray-600 text-gray-300"}`}>
+                          {String.fromCharCode(65 + i)}
+                        </span>
+                        <span className="font-semibold text-base">{opt}</span>
+                        {selected && <span className="ml-auto text-primary-400 text-xl">✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Navigation buttons */}
+              <div className="flex items-center justify-between gap-3 mt-1">
+                <button type="button" onClick={() => goToQuestion(currentIndex - 1)}
+                  disabled={currentIndex === 0}
+                  className={`flex items-center gap-2 px-5 py-3 rounded-2xl font-bold text-sm transition-all
+                    ${currentIndex === 0
+                      ? "bg-gray-800 text-gray-600 cursor-not-allowed border border-gray-700"
+                      : "bg-gray-700 text-gray-200 hover:bg-gray-600 cursor-pointer border border-gray-600"}`}>
+                  ← Prev
+                </button>
+
+                <div className="flex items-center gap-2">
+                  {isAnswered && (
+                    <button type="button" onClick={changeAnswer}
+                      className="px-4 py-3 rounded-2xl bg-amber-500/15 text-amber-400 border border-amber-500/30 font-bold text-sm hover:bg-amber-500/25 transition-all cursor-pointer">
+                      ✏️ Change
                     </button>
-                  );
-                })}
+                  )}
+
+                  {currentIndex < questions.length - 1 ? (
+                    <button type="button" onClick={() => goToQuestion(currentIndex + 1)}
+                      className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-primary-600 text-white font-bold text-sm hover:bg-primary-700 transition-all cursor-pointer shadow-lg shadow-primary-500/20">
+                      {isAnswered ? "Next →" : "Skip →"}
+                    </button>
+                  ) : (
+                    <button type="button" onClick={confirmSubmit}
+                      className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-green-600 text-white font-bold text-sm hover:bg-green-700 transition-all cursor-pointer shadow-lg shadow-green-500/20">
+                      Submit Quiz ✓
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
+          )}
+        </div>
 
-            <p className="text-center text-gray-500 text-xs">
-              {isAnswered ? "Loading next question…" : "Click an option to select your answer. You cannot go back."}
-            </p>
+        {/* Right Column: Question Navigator */}
+        <div className="w-full lg:w-80 flex-shrink-0 lg:sticky lg:top-4">
+          <div className="bg-gray-800 rounded-3xl border border-gray-700 p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-sm font-black text-white uppercase tracking-wide">Question Navigator</span>
+            </div>
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-700/60">
+              <span className="text-xs font-semibold text-gray-500">{answeredCount}/{questions.length} answered</span>
+              <button type="button" onClick={confirmSubmit}
+                className="px-3 py-1.5 rounded-xl bg-green-600 hover:bg-green-700 text-white text-xs font-bold transition-all cursor-pointer border-0 shadow-md">
+                Submit Quiz
+              </button>
+            </div>
+            <div className="grid grid-cols-5 gap-2 max-h-[460px] overflow-y-auto pr-1">
+              {questions.map((_, i) => {
+                const ans = answers[i];
+                const isDone = ans?.answer?.trim();
+                const isCurrent = i === currentIndex;
+                const isTimeout = ans?.timedOut && !isDone;
+                return (
+                  <button key={i} type="button"
+                    onClick={() => goToQuestion(i)}
+                    className={`aspect-square w-full rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer border-0 flex items-center justify-center
+                      ${isCurrent
+                        ? "bg-primary-500 text-white shadow-lg shadow-primary-500/40 scale-105"
+                        : isDone
+                        ? "bg-green-500/20 text-green-400 hover:bg-green-500/30"
+                        : isTimeout
+                        ? "bg-orange-500/20 text-orange-400 hover:bg-orange-500/30"
+                        : "bg-gray-700/60 text-gray-400 hover:bg-gray-600 hover:text-gray-200"
+                      }`}>
+                    {i + 1}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        )}
+        </div>
+
       </div>
 
-      {/* Bottom progress dots */}
-      <div className="relative z-10 flex items-center justify-center gap-1.5 pb-6 px-4 flex-wrap max-w-2xl mx-auto w-full">
-        {questions.map((_, i) => {
-          const ans = answers[i];
-          const isDone = ans?.answer?.trim();
-          const isCurrent = i === currentIndex;
-          const isTimeout = ans?.timedOut;
-          return (
-            <div key={i} title={`Q${i + 1}`}
-              className={`w-2.5 h-2.5 rounded-full transition-all duration-300
-                ${isCurrent ? "w-5 bg-primary-500 shadow-lg shadow-primary-500/50"
-                  : isTimeout ? "bg-orange-500/60"
-                  : isDone ? "bg-green-500/70"
-                  : i < currentIndex ? "bg-gray-600"
-                  : "bg-gray-700"
-                }`}
-            />
-          );
-        })}
-      </div>
+      {/* ══ Freeze overlay ═════════════════════════════════ */}
+      {frozen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-900/95 backdrop-blur-md">
+          <div className="text-center px-6 max-w-sm">
+            {document.hidden ? (
+              <>
+                <div className="w-16 h-16 rounded-2xl bg-amber-500/20 flex items-center justify-center mx-auto mb-5 text-4xl">
+                  ⏸️
+                </div>
+                <h2 className="text-white font-black text-2xl mb-2">Quiz Paused</h2>
+                <p className="text-gray-400 text-sm leading-relaxed">
+                  You switched away from the quiz window.{" "}
+                  <strong className="text-amber-400">Return to this tab</strong> to resume.
+                </p>
+                <div className="mt-6 flex items-center justify-center gap-2 text-gray-500 text-xs">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  Waiting for you to return…
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="w-16 h-16 rounded-2xl bg-primary-500/20 flex items-center justify-center mx-auto mb-5 text-4xl">
+                  🔒
+                </div>
+                <h2 className="text-white font-black text-2xl mb-2">You Left the Quiz</h2>
+                <p className="text-gray-400 text-sm leading-relaxed mb-6">
+                  Switching tabs or windows is not allowed. This has been recorded as a violation.
+                </p>
+                <button
+                  onClick={() => { setFrozen(false); }}
+                  className="px-10 py-4 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white font-bold text-base rounded-2xl shadow-xl hover:shadow-2xl transition-all"
+                >
+                  Click to Resume Quiz →
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   );
 }

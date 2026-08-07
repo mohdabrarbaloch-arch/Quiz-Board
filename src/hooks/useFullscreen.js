@@ -1,11 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-/**
- * Custom hook for managing fullscreen mode with strict enforcement
- * Production-grade: Prevents ESC key from exiting fullscreen
- * @param {Function} onExit - Callback when fullscreen is exited
- * @returns {Object} Fullscreen state and controls
- */
 export function useFullscreen(onExit) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isSupported, setIsSupported] = useState(true);
@@ -24,7 +18,7 @@ export function useFullscreen(onExit) {
     try {
       if (document.documentElement.requestFullscreen) {
         await document.documentElement.requestFullscreen({
-          navigationUI: "hide" // Hide browser UI
+          navigationUI: "hide"
         });
         wasFullscreenRef.current = true;
         setIsFullscreen(true);
@@ -54,8 +48,6 @@ export function useFullscreen(onExit) {
       const inFullscreen = Boolean(document.fullscreenElement);
       setIsFullscreen(inFullscreen);
       
-      // Only call onExit if we were in fullscreen and now we're not
-      // AND it was previously active (not first time)
       if (!inFullscreen && wasFullscreenRef.current) {
         wasFullscreenRef.current = false;
         if (onExitRef.current) {
@@ -66,27 +58,19 @@ export function useFullscreen(onExit) {
       }
     };
 
-    // Listen to all fullscreen change events (cross-browser)
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
-    document.addEventListener("mozfullscreenchange", handleFullscreenChange);
-    document.addEventListener("MSFullscreenChange", handleFullscreenChange);
+    const events = ["fullscreenchange", "webkitfullscreenchange", "mozfullscreenchange", "MSFullscreenChange"];
+    events.forEach(event => document.addEventListener(event, handleFullscreenChange));
 
     return () => {
-      document.removeEventListener("fullscreenchange", handleFullscreenChange);
-      document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
-      document.removeEventListener("mozfullscreenchange", handleFullscreenChange);
-      document.removeEventListener("MSFullscreenChange", handleFullscreenChange);
+      events.forEach(event => document.removeEventListener(event, handleFullscreenChange));
     };
   }, []);
 
-  // Attempt to re-enter fullscreen if user exits
   useEffect(() => {
     if (!isFullscreen && wasFullscreenRef.current) {
-      // Small delay to allow violation recording
       const timer = setTimeout(() => {
         if (!document.fullscreenElement) {
-          enter(); // Try to re-enter fullscreen
+          enter();
         }
       }, 500);
       return () => clearTimeout(timer);

@@ -51,6 +51,14 @@
           }
         }
       }
+    },
+    "feedback": {
+      ".read": "auth !== null && root.child('admins/' + auth.uid).exists()",
+      "$feedbackId": {
+        ".write": "!data.exists()",
+        ".validate": "newData.hasChildren(['name', 'category', 'rating', 'clientSubmittedAt'])"
+      }
     }
   }
 }
+

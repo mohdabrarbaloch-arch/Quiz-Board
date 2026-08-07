@@ -1,12 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-/**
- * Custom hook for managing individual question timer
- * @param {number} duration - Duration per question in seconds
- * @param {Function} onTimeout - Callback when question times out
- * @param {boolean} isActive - Whether timer should be running
- * @returns {Object} Timer state and controls
- */
 export function useQuestionTimer(duration, onTimeout, isActive = false) {
   const [secondsLeft, setSecondsLeft] = useState(duration);
   const [isRunning, setIsRunning] = useState(false);
@@ -37,6 +30,11 @@ export function useQuestionTimer(duration, onTimeout, isActive = false) {
     startTimeRef.current = Date.now();
   }, [duration]);
 
+  const getTimeSpent = useCallback(() => {
+    if (!startTimeRef.current) return 0;
+    return Math.floor((Date.now() - startTimeRef.current) / 1000);
+  }, []);
+
   useEffect(() => {
     if (!isActive || !isRunning || !startTimeRef.current) {
       return undefined;
@@ -65,7 +63,6 @@ export function useQuestionTimer(duration, onTimeout, isActive = false) {
     };
   }, [isActive, isRunning, duration]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (intervalRef.current) {
@@ -80,9 +77,6 @@ export function useQuestionTimer(duration, onTimeout, isActive = false) {
     start,
     stop,
     reset,
-    getTimeSpent: () => {
-      if (!startTimeRef.current) return 0;
-      return Math.floor((Date.now() - startTimeRef.current) / 1000);
-    },
+    getTimeSpent,
   };
 }

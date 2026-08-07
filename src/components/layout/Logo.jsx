@@ -14,10 +14,10 @@ export default function Logo({ size = "md", className = "" }) {
       </div>
       <div className="flex flex-col">
         <span className="font-black text-gray-900 text-xl tracking-tight">
-          QuizBoard
+          QuizGuard
         </span>
         <span className="text-xs text-gray-500 font-medium tracking-wide uppercase">
-          Saylani 
+          Secure Testing
         </span>
       </div>
     </div>

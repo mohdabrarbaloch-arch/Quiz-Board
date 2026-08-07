@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import AdminDashboard from "./pages/AdminDashboard.jsx";
 import AdminLogin from "./pages/AdminLogin.jsx";
+import FeedbackPage from "./pages/FeedbackPage.jsx";
 import QuizAttempt from "./pages/QuizAttempt.jsx";
 import StudentHome from "./pages/StudentHome.jsx";
 import SubmissionDetail from "./pages/SubmissionDetail.jsx";
@@ -34,6 +35,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<StudentHome />} />
         <Route path="/view-result" element={<ViewResult />} />
+        <Route path="/feedback" element={<FeedbackPage />} />
         <Route path="/quiz/:quizId" element={<QuizAttempt />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route

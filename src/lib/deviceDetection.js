@@ -1,34 +1,34 @@
-/**
- * Device detection utility
- * Detects real mobile devices while allowing desktop mode browsers
- */
+import { MOBILE_BREAKPOINT, TABLET_BREAKPOINT } from "./constants.js";
+
+const MOBILE_UA_PATTERN = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i;
+
+function hasTouch() {
+  return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+}
+
+function isSmallScreen() {
+  return window.innerWidth < MOBILE_BREAKPOINT && window.innerHeight < TABLET_BREAKPOINT;
+}
+
+function hasMobileUserAgent() {
+  return MOBILE_UA_PATTERN.test(navigator.userAgent);
+}
+
+function hasOrientationAPI() {
+  return typeof window.orientation !== 'undefined';
+}
 
 export function isMobileDevice() {
-  // Check for touch support
-  const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-  
-  // Check screen size (real mobile devices typically have smaller screens)
-  const isSmallScreen = window.innerWidth < 768 && window.innerHeight < 1024;
-  
-  // Check user agent for mobile keywords
-  const mobileKeywords = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i;
-  const hasMobileUA = mobileKeywords.test(navigator.userAgent);
-  
-  // Check for mobile-specific properties
-  const hasOrientationAPI = typeof window.orientation !== 'undefined';
-  
-  // Device is considered mobile if:
-  // 1. It has mobile user agent AND
-  // 2. Has small screen AND
-  // 3. Has touch support OR orientation API
-  const isMobile = hasMobileUA && isSmallScreen && (hasTouch || hasOrientationAPI);
-  
-  // Additional check: if user agent says mobile but screen is large, it's likely desktop mode
-  if (hasMobileUA && !isSmallScreen) {
-    return false; // Desktop mode on mobile browser
+  const mobileUA = hasMobileUserAgent();
+  const smallScreen = isSmallScreen();
+  const touch = hasTouch();
+  const orientation = hasOrientationAPI();
+
+  if (mobileUA && !smallScreen) {
+    return false;
   }
-  
-  return isMobile;
+
+  return mobileUA && smallScreen && (touch || orientation);
 }
 
 export function getDeviceInfo() {
@@ -37,18 +37,14 @@ export function getDeviceInfo() {
     userAgent: navigator.userAgent,
     screenWidth: window.innerWidth,
     screenHeight: window.innerHeight,
-    hasTouch: 'ontouchstart' in window || navigator.maxTouchPoints > 0,
+    hasTouch: hasTouch(),
     platform: navigator.platform,
   };
 }
 
 export function isDesktopMode() {
-  // Chrome desktop mode typically has:
-  // 1. Large screen size (min 768px width)
-  // 2. May have mobile user agent
-  const isLargeScreen = window.innerWidth >= 768;
-  const hasMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-  
-  // If it has mobile UA but large screen, it's desktop mode
+  const isLargeScreen = window.innerWidth >= MOBILE_BREAKPOINT;
+  const hasMobileUA = hasMobileUserAgent();
+
   return hasMobileUA && isLargeScreen;
 }

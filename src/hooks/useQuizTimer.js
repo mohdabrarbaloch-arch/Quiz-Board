@@ -1,12 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-/**
- * Custom hook for managing quiz timer with auto-submission
- * @param {number} totalSeconds - Total quiz duration in seconds
- * @param {Function} onTimeEnd - Callback when time reaches zero
- * @param {boolean} isActive - Whether timer should be running
- * @returns {Object} Timer state and controls
- */
 export function useQuizTimer(totalSeconds, onTimeEnd, isActive = false) {
   const [secondsLeft, setSecondsLeft] = useState(totalSeconds);
   const [isRunning, setIsRunning] = useState(false);

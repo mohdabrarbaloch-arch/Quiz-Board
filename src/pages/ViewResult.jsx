@@ -61,7 +61,7 @@ export default function ViewResult() {
           if (foundSubmission) return; // Already found
           
           const submission = subSnapshot.val();
-          if (submission.rollNo && submission.rollNo.toLowerCase() === rollNo.toLowerCase()) {
+          if (submission.rollNo && String(submission.rollNo).toLowerCase() === String(rollNo).toLowerCase()) {
             foundSubmission = { id: subSnapshot.key, quizId: quizId, ...submission };
             
             // Get the quiz details for this submission

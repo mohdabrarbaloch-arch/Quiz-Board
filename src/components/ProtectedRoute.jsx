@@ -2,25 +2,36 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { auth } from "../lib/firebase.js";
+import { AUTH_STATUS } from "../lib/constants.js";
 import { fetchAdminByUid } from "../services/submissionService.js";
 
 export default function ProtectedRoute({ children }) {
-  const [status, setStatus] = useState("loading"); // "loading" | "allowed" | "denied"
+  const [status, setStatus] = useState(AUTH_STATUS.LOADING);
 
   useEffect(() => {
-    return onAuthStateChanged(auth, async (user) => {
-      if (!user) { setStatus("denied"); return; }
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        setStatus(AUTH_STATUS.DENIED);
+        return;
+      }
+      
       try {
         const admin = await fetchAdminByUid(user.uid);
-        if (!admin) { await signOut(auth); setStatus("denied"); return; }
-        setStatus("allowed");
+        if (!admin) {
+          await signOut(auth);
+          setStatus(AUTH_STATUS.DENIED);
+          return;
+        }
+        setStatus(AUTH_STATUS.ALLOWED);
       } catch {
-        setStatus("denied");
+        setStatus(AUTH_STATUS.DENIED);
       }
     });
+
+    return unsubscribe;
   }, []);
 
-  if (status === "loading") {
+  if (status === AUTH_STATUS.LOADING) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-gray-50">
         <div className="w-12 h-12 rounded-2xl bg-primary-700 flex items-center justify-center text-white font-black text-2xl shadow-lg">Q</div>
@@ -32,7 +43,9 @@ export default function ProtectedRoute({ children }) {
     );
   }
 
-  if (status === "denied") return <Navigate to="/admin/login" replace />;
+  if (status === AUTH_STATUS.DENIED) {
+    return <Navigate to="/admin/login" replace />;
+  }
 
   return children;
 }
