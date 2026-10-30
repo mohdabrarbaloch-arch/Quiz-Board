@@ -118,7 +118,7 @@ npm install
 2. Add a new user with email and password
 3. Copy the User UID
 4. Go to Realtime Database
-5. Create a new node: `/admins/{17jjmGFphrezuvJbpwGpe5kFm232}`
+5. Create a new node: `/admins/{rfFv1Gx3AqQ8BlpbWXcqgDoxNMD3}`
 6. Add a child property: `role: "admin"`
 7. Your database should look like:
    ```
